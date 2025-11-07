@@ -1,0 +1,13 @@
+﻿__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+*.sqlite3
+.DS_Store
+*.xlsx
+*.txt
+saved_zones.json

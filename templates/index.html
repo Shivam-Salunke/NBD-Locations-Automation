@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Locations Automation</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+        th { background-color: #f2f2f2; }
+        input { width: 80px; margin: 2px; }
+        .btn { padding: 8px 16px; margin: 5px; cursor: pointer; border: none; border-radius: 4px; }
+        .btn-save { background-color: #4CAF50; color: white; }
+        .btn-new { background-color: #2196F3; color: white; }
+        .btn-excel { background-color: #9C27B0; color: white; }
+        .btn-text { background-color: #009688; color: white; }
+        .btn-visualize { background-color: #FF9800; color: white; }
+        .btn-clear { background-color: #f44336; color: white; }
+        .btn-delete { background-color: #f44336; color: white; padding: 4px 8px; }
+        .message { padding: 10px; margin: 10px 0; border-radius: 4px; }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .zone-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 4px; }
+        .section { margin: 30px 0; padding: 20px; border: 1px solid #ccc; border-radius: 4px; }
+        .stats { background-color: #e3f2fd; padding: 10px; border-radius: 4px; margin: 10px 0; }
+        .button-group { margin: 15px 0; }
+        .download-buttons { display: flex; gap: 10px; flex-wrap: wrap; }
+    </style>
+</head>
+<body>
+    <h2>Locations Automation</h2>
+    
+    {% if message %}
+        <div class="message {% if '❌' in message %}error{% else %}success{% endif %}">
+            <strong>{{ message }}</strong>
+        </div>
+    {% endif %}
+
+    <!-- Statistics -->
+    {% if all_zones %}
+    <div class="stats">
+        <strong>Saved Zones: {{ all_zones|length }} zone(s)</strong>
+        {% if all_zones %}
+            - 
+            {% for zone in all_zones %}
+            {{ zone.zg_rz }}{% if not loop.last %}, {% endif %}
+            {% endfor %}
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Section 1: Create and Save Zone -->
+    <div class="section">
+        <h3>Create and Save Zone</h3>
+        <form method="POST" id="zoneForm">
+            <div>
+                <label><strong>ZG/RZ (4 digits): </strong></label>
+                <input type="text" name="zg_rz" id="zg_rz" maxlength="4" pattern="[0-9]{4}" title="4-digit number" required 
+                       value="{% if not clear_form %}{{ request.form.zg_rz or '' }}{% endif %}">
+            </div>
+            <br>
+
+            <h4>Add AI Ranges</h4>
+            <table id="ai_table">
+                <thead>
+                    <tr>
+                        <th>AI (single or range, e.g., 1 or 1-3)</th>
+                        <th>BI Start</th>
+                        <th>BI End</th>
+                        <th>RO Start</th>
+                        <th>RO End</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="ai_table_body">
+                    <!-- Initial row will be added by JavaScript -->
+                </tbody>
+            </table>
+            
+            <div class="button-group">
+                <button type="button" class="btn" onclick="addRow()" style="background-color: #6c757d; color: white;">Add AI Range</button>
+            </div>
+            
+            <div class="button-group">
+                <button type="submit" name="save_zone" class="btn btn-save">Save Zone</button>
+                <button type="submit" name="new_zone" class="btn btn-new">New Zone</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Section 2: Actions on Saved Zones -->
+    <div class="section">
+        <h3>Actions on Saved Zones</h3>
+        <form method="POST">
+            <button type="submit" name="visualize_zones" class="btn btn-visualize">Visualize All Zones</button>
+            <div class="download-buttons">
+                <button type="submit" name="download_excel" class="btn btn-excel">Download Excel</button>
+                <button type="submit" name="download_text" class="btn btn-text">Download Text (Tab-delimited)</button>
+            </div>
+            <button type="submit" name="clear_zones" class="btn btn-clear" onclick="return confirm('Are you sure you want to clear all zones? This cannot be undone.')">Clear All Zones</button>
+        </form>
+    </div>
+
+    {% if show_visualization and all_zones %}
+        <div class="zone-section">
+            <h3>All Saved Zones</h3>
+            {% for zone in all_zones %}
+                <div style="margin-bottom: 20px;">
+                    <h4>ZG/RZ: {{ zone.zg_rz }}</h4>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>AI</th>
+                                <th>BI Start</th>
+                                <th>BI End</th>
+                                <th>RO Start</th>
+                                <th>RO End</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for ai, ranges in zone.ai_dict.items()|sort %}
+                            <tr>
+                                <td>{{ "%02d"|format(ai) }}</td>
+                                <td>{{ "%02d"|format(ranges.bi[0]) }}</td>
+                                <td>{{ "%02d"|format(ranges.bi[1]) }}</td>
+                                <td>{{ "%02d"|format(ranges.ro[0]) }}</td>
+                                <td>{{ "%02d"|format(ranges.ro[1]) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <script>
+        // Initialize with one row
+        function initializeTable() {
+            const tableBody = document.getElementById("ai_table_body");
+            tableBody.innerHTML = '';
+            addRow();
+        }
+    
+        function addRow() {
+            const tableBody = document.getElementById("ai_table_body");
+            const newRow = tableBody.insertRow();
+            
+            const inputs = [
+                {name: "ai", type: "text", value: ""},
+                {name: "bi_start", type: "number", value: ""},
+                {name: "bi_end", type: "number", value: ""},
+                {name: "ro_start", type: "number", value: ""},
+                {name: "ro_end", type: "number", value: ""}
+            ];
+            
+            for (let i = 0; i < 6; i++) {
+                const cell = newRow.insertCell();
+                if (i < 5) {
+                    const input = document.createElement("input");
+                    input.type = inputs[i].type;
+                    input.name = inputs[i].name;
+                    input.required = true;
+                    if (inputs[i].type === "number") {
+                        input.min = 0;
+                        input.max = 99;
+                    }
+                    // Clear value if this is a new zone request
+                    {% if clear_form %}
+                    input.value = '';
+                    {% endif %}
+                    cell.appendChild(input);
+                } else {
+                    const btn = document.createElement("button");
+                    btn.type = "button";
+                    btn.className = "btn-delete";
+                    btn.innerText = "Delete";
+                    btn.onclick = function() { 
+                        if (tableBody.rows.length > 1) {
+                            tableBody.deleteRow(newRow.rowIndex);
+                        }
+                    };
+                    cell.appendChild(btn);
+                }
+            }
+        }
+        
+        function deleteRow(button) {
+            const tableBody = document.getElementById("ai_table_body");
+            if (tableBody.rows.length > 1) {
+                const row = button.parentNode.parentNode;
+                tableBody.deleteRow(row.rowIndex);
+            }
+        }
+        
+        // Add initial validation and setup
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeTable();
+            
+            const zgRzInput = document.getElementById("zg_rz");
+            if (zgRzInput) {
+                zgRzInput.addEventListener('input', function() {
+                    this.value = this.value.replace(/[^0-9]/g, '');
+                });
+                
+                // Clear ZG/RZ field if this is a new zone request
+                {% if clear_form %}
+                zgRzInput.value = '';
+                {% endif %}
+            }
+        });
+    </script>
+</body>
+</html>
